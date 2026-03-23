@@ -40,5 +40,16 @@ K_STM32_MCP/
 | High-level | `read_register`, `write_register`, `read_memory`, `flash_verify` | SVD-aware operations |
 | BAT scripts | `run_bat`, `list_bat` | Windows build/flash script execution |
 
+## Starter Kit
+
+This repo contains the module only. For a ready-to-use project with **K_MIND + K_TOOLS + K_STM32_MCP + 35 skills**, download the starter kit from the host repo:
+
+```bash
+curl -L https://github.com/packetqc/knowledge/raw/main/Knowledge/K_STM32_MCP/dist/live-stm32-starter.tar.gz | tar xz
+bash setup.sh
+```
+
+The starter kit includes the full K_MIND memory system, K_TOOLS operational utilities, all applicable Claude Code skills, hooks, and a template CLAUDE.md ready for your MCU configuration.
+
 ---
 *Part of the Knowledge 2.0 multi-module architecture*
