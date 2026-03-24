@@ -155,7 +155,8 @@ Search order:
 ```
 
 **What to search for:**
-- Existing widgets, painters, containers that match the requirement
+- Existing widgets in the `.touchgfx` project file (check `Components` arrays)
+- Existing widgets, painters, containers in `gui/` user code
 - HAL peripherals already initialized in `main.c` (don't re-init)
 - TouchGFX framework classes that solve the problem natively
 - Custom libraries in `Knowledge/K_STM32_MCP/libs/` that provide the needed functionality
@@ -524,36 +525,33 @@ TouchGFX enforces **Model-View-Presenter (MVP)**. Claude MUST follow this patter
 - Model is singleton, shared across all screens — keep it lean
 - `ModelListener` interface defines what Presenters can receive from Model
 
-### Widget Declaration — Where and How
+### Widget Creation — Human-Designs, Claude-Codes Convention
 
-**Declare widgets as protected members in the View `.hpp` file:**
+**Two distinct coding domains with clear ownership:**
+
+#### Frontend UI Widgets — Human Designs First
+
+Frontend user-facing widgets (buttons, labels, images, layout) are designed by humans in TouchGFX Designer. The Designer generates code into `ViewBase`. Claude MUST:
+- **Never edit `ViewBase` or base class files** — Designer regenerates them on every save
+- **Never edit the `.touchgfx` project file** to add widgets — humans use the Designer UI for this
+- **Use Designer-created widgets** by referencing them in View code (they're inherited from ViewBase)
+- **Add runtime behavior** to Designer widgets in View/Presenter (animations, state changes, event handling)
+
+The `.touchgfx` project file (`Appli/TouchGFX/<ProjectName>.touchgfx`) is the Designer's domain. Claude reads it to understand the screen layout but does not modify it for widget creation.
+
+#### Backend / Programmatic Widgets — Claude Codes
+
+For backend logic, programmatic rendering, and dynamic widgets that don't exist at design time, Claude codes directly in View files:
 
 ```cpp
-// In <Screen>View.hpp
-#include <gui_generated/screen1_screen/Screen1ViewBase.hpp>
-#include <touchgfx/widgets/canvas/Circle.hpp>
-#include <touchgfx/widgets/canvas/PainterRGB565.hpp>
-
-class Screen1View : public Screen1ViewBase
-{
-public:
-    Screen1View();
-    virtual ~Screen1View() {}
-    virtual void setupScreen();
-    virtual void tearDownScreen();
+// In <Screen>View.hpp — declare as protected member
 protected:
-    touchgfx::Circle blueCircle;           // widget member
-    touchgfx::PainterRGB565 bluePainter;   // painter for canvas widgets
-};
-```
+    touchgfx::Circle blueCircle;
+    touchgfx::PainterRGB565 bluePainter;
 
-**Initialize widgets in the View constructor or `setupScreen()`:**
-
-```cpp
-// In <Screen>View.cpp
+// In <Screen>View.cpp — configure in constructor, add in setupScreen()
 Screen1View::Screen1View()
 {
-    // Constructor: set up painters and widget properties
     bluePainter.setColor(touchgfx::Color::getColorFromRGB(0, 100, 255));
 
     blueCircle.setPosition(200, 40, 400, 400);
@@ -562,14 +560,31 @@ Screen1View::Screen1View()
     blueCircle.setLineWidth(0);
     blueCircle.setArc(0, 360);
     blueCircle.setPainter(bluePainter);
+    blueCircle.setPrecision(5);
 }
 
 void Screen1View::setupScreen()
 {
     Screen1ViewBase::setupScreen();  // ALWAYS call base first
-    add(blueCircle);                 // add to display list
+    add(blueCircle);
 }
 ```
+
+**Claude codes in View files when:**
+- Implementing backend-driven visuals (sensor data display, status indicators)
+- Creating programmatic/dynamic widgets computed at runtime
+- Adding behavior and logic to Designer-created widgets
+- Working in Presenter and Model layers (always code, never Designer)
+
+#### Never Touch Base Classes
+
+| File | Who Owns It | Claude Can Edit? |
+|------|-------------|-----------------|
+| `<Screen>View.hpp / .cpp` | Developer (Claude + human) | **YES** |
+| `<Screen>Presenter.hpp / .cpp` | Developer (Claude + human) | **YES** |
+| `Model.hpp / .cpp` | Developer (Claude + human) | **YES** |
+| `<Screen>ViewBase.hpp / .cpp` | TouchGFX Designer | **NEVER** |
+| `<ProjectName>.touchgfx` | TouchGFX Designer (human) | **NEVER** for widget creation |
 
 ### Interaction Handling — Presenter Takes the Logic
 
@@ -620,9 +635,10 @@ Custom containers follow the same MVP structure but are reusable across screens.
 
 ### Key Takeaways
 
-1. **Code in `gui/` only** — this is the user code area that TouchGFX Designer respects
-2. **Widgets in View** — declare in `.hpp`, configure in constructor or `setupScreen()`
-3. **Logic in Presenter** — never put business logic in View
-4. **Data in Model** — shared state lives here, driven by `tick()`
-5. **Never touch `generated/`** — Designer overwrites it completely on every save
-6. **MVP is not optional** — it's how TouchGFX works, not a style preference
+1. **Humans design frontend UI** — widgets created in TouchGFX Designer, generated into ViewBase
+2. **Claude codes backend logic** — programmatic widgets, behavior, Presenter/Model in View files
+3. **Never touch base classes** — ViewBase and `.touchgfx` are Designer's domain
+4. **Code in `gui/` only** — View/Presenter/Model user code
+5. **Logic in Presenter** — never put business logic in View
+6. **Data in Model** — shared state lives here, driven by `tick()`
+7. **MVP is not optional** — it's how TouchGFX works, not a style preference
