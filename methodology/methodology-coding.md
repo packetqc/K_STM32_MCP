@@ -456,3 +456,173 @@ void MyView::setupScreen()
 - Work nodes updated on completion
 
 Each step gates the next. No skipping. No shortcuts. No invisible work.
+
+---
+
+## TouchGFX Application Structure — Coding Convention
+
+### Project Layout (Advanced / STM32CubeMX-Generated)
+
+TouchGFX projects generated via STM32CubeMX use the **advanced** structure. The TGFX application lives under `Appli/TouchGFX/`, not at the project root. This is the layout Claude MUST respect:
+
+```
+Appli/TouchGFX/
+  gui/                              ◄── USER CODE — Claude codes HERE
+    include/gui/
+      common/
+        FrontendApplication.hpp      — App-level customization
+        FrontendHeap.hpp             — Heap configuration
+      model/
+        Model.hpp                    — Shared data (all presenters see this)
+        ModelListener.hpp            — Interface presenters implement
+      <screen_name>_screen/
+        <Screen>View.hpp             — View: widgets, layout, visual logic
+        <Screen>Presenter.hpp        — Presenter: business logic, Model bridge
+    src/
+      common/
+        FrontendApplication.cpp
+      model/
+        Model.cpp                    — tick(), data updates
+      <screen_name>_screen/
+        <Screen>View.cpp             — Widget setup, event handlers
+        <Screen>Presenter.cpp        — activate/deactivate, Model interaction
+
+  generated/                         ◄── NEVER EDIT — TouchGFX Designer owns this
+    gui_generated/
+      include/gui_generated/
+        <screen_name>_screen/
+          <Screen>ViewBase.hpp       — Base class (Designer-managed widgets)
+      src/
+        <screen_name>_screen/
+          <Screen>ViewBase.cpp       — Base setup (Designer-managed)
+    fonts/, images/, texts/, videos/ — Asset pipeline output
+
+  target/                            ◄── NEVER EDIT — Board-specific HAL
+    TouchGFXHAL.cpp
+    STM32TouchController.cpp
+```
+
+### MVP Pattern — Mandatory for All Screen Code
+
+TouchGFX enforces **Model-View-Presenter (MVP)**. Claude MUST follow this pattern:
+
+| Component | Role | File Location | Owns |
+|-----------|------|---------------|------|
+| **View** | Visual layer — widgets, layout, animations | `gui/src/<screen>_screen/<Screen>View.cpp` | Widget instances, visual state |
+| **Presenter** | Logic layer — handles events, talks to Model | `gui/src/<screen>_screen/<Screen>Presenter.cpp` | Business logic, Model bridge |
+| **Model** | Data layer — shared state, tick-driven updates | `gui/src/model/Model.cpp` | Application data, HAL data bridge |
+
+**Data flow:**
+```
+  User input → View → Presenter → Model
+  Model tick() → Presenter (via ModelListener) → View update
+```
+
+**Rules:**
+- View NEVER accesses Model directly — always through Presenter
+- Presenter NEVER creates or positions widgets — that's View's job
+- Model is singleton, shared across all screens — keep it lean
+- `ModelListener` interface defines what Presenters can receive from Model
+
+### Widget Declaration — Where and How
+
+**Declare widgets as protected members in the View `.hpp` file:**
+
+```cpp
+// In <Screen>View.hpp
+#include <gui_generated/screen1_screen/Screen1ViewBase.hpp>
+#include <touchgfx/widgets/canvas/Circle.hpp>
+#include <touchgfx/widgets/canvas/PainterRGB565.hpp>
+
+class Screen1View : public Screen1ViewBase
+{
+public:
+    Screen1View();
+    virtual ~Screen1View() {}
+    virtual void setupScreen();
+    virtual void tearDownScreen();
+protected:
+    touchgfx::Circle blueCircle;           // widget member
+    touchgfx::PainterRGB565 bluePainter;   // painter for canvas widgets
+};
+```
+
+**Initialize widgets in the View constructor or `setupScreen()`:**
+
+```cpp
+// In <Screen>View.cpp
+Screen1View::Screen1View()
+{
+    // Constructor: set up painters and widget properties
+    bluePainter.setColor(touchgfx::Color::getColorFromRGB(0, 100, 255));
+
+    blueCircle.setPosition(200, 40, 400, 400);
+    blueCircle.setCenter(200, 200);
+    blueCircle.setRadius(190);
+    blueCircle.setLineWidth(0);
+    blueCircle.setArc(0, 360);
+    blueCircle.setPainter(bluePainter);
+}
+
+void Screen1View::setupScreen()
+{
+    Screen1ViewBase::setupScreen();  // ALWAYS call base first
+    add(blueCircle);                 // add to display list
+}
+```
+
+### Interaction Handling — Presenter Takes the Logic
+
+When widgets need interaction (buttons, touch events, callbacks):
+
+```cpp
+// View catches the UI event, delegates to Presenter
+void Screen1View::onButtonClicked()
+{
+    presenter->handleButtonAction();  // View → Presenter
+}
+
+// Presenter processes logic, may update Model
+void Screen1Presenter::handleButtonAction()
+{
+    // Business logic here
+    model->setSomeState(true);        // Presenter → Model
+}
+
+// Model notifies all Presenters via ModelListener
+void Model::tick()
+{
+    if (stateChanged) {
+        modelListener->stateUpdated(value);  // Model → Presenter
+    }
+}
+
+// Presenter updates View
+void Screen1Presenter::stateUpdated(int value)
+{
+    getView()->refreshDisplay(value);  // Presenter → View
+}
+```
+
+### Editable vs Read-Only Boundaries
+
+| Path | Editable? | Who Owns It |
+|------|-----------|-------------|
+| `gui/src/` and `gui/include/` | **YES** | Developer (Claude) |
+| `generated/gui_generated/` | **NO** | TouchGFX Designer — regenerated on save |
+| `generated/fonts/`, `images/`, `texts/` | **NO** | Asset pipeline — regenerated on build |
+| `target/` | **NO** | Board HAL — configured via CubeMX/Designer |
+| `Core/Src/`, `Core/Inc/` | **YES** (carefully) | System init — CubeMX generates, user sections editable |
+
+### Custom Containers (Future)
+
+Custom containers follow the same MVP structure but are reusable across screens. They will have their own View/Presenter pairs under `gui/src/containers/`. Convention details will be added when this pattern is needed.
+
+### Key Takeaways
+
+1. **Code in `gui/` only** — this is the user code area that TouchGFX Designer respects
+2. **Widgets in View** — declare in `.hpp`, configure in constructor or `setupScreen()`
+3. **Logic in Presenter** — never put business logic in View
+4. **Data in Model** — shared state lives here, driven by `tick()`
+5. **Never touch `generated/`** — Designer overwrites it completely on every save
+6. **MVP is not optional** — it's how TouchGFX works, not a style preference
