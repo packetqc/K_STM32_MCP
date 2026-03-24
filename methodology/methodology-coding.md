@@ -539,6 +539,31 @@ Frontend user-facing widgets (buttons, labels, images, layout) are designed by h
 
 The `.touchgfx` project file (`Appli/TouchGFX/<ProjectName>.touchgfx`) is the Designer's domain. Claude reads it to understand the screen layout but does not modify it for widget creation.
 
+#### Working with Designer-Created Widgets — Claude Codes in the Inherited Class
+
+When humans create widgets in TouchGFX Designer, those widgets are instantiated and owned by `ViewBase` (the base class). Claude programs their behavior in the **inherited View class** — which has full access to all Designer-created widgets via inheritance. Never modify ViewBase to add logic.
+
+```cpp
+// Designer created "blueCircle" in ViewBase — Claude uses it in View:
+void Screen1View::setupScreen()
+{
+    Screen1ViewBase::setupScreen();  // base class creates all Designer widgets
+
+    // Claude adds runtime behavior to Designer-created widgets here
+    blueCircle.setVisible(sensorActive);  // inherited from ViewBase
+}
+
+// Claude adds event handling in View
+void Screen1View::handleTickEvent()
+{
+    // Animate or update Designer widgets at runtime
+    blueCircle.setRadius(computedRadius);
+    blueCircle.invalidate();
+}
+```
+
+**The rule:** Designer owns widget creation (ViewBase). Claude owns widget behavior (View). Same widget, two layers, clean separation.
+
 #### Backend / Programmatic Widgets — Claude Codes
 
 For backend logic, programmatic rendering, and dynamic widgets that don't exist at design time, Claude codes directly in View files:
