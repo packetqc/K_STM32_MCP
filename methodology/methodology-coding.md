@@ -460,6 +460,172 @@ Each step gates the next. No skipping. No shortcuts. No invisible work.
 
 ---
 
+## Live Debugging — Attach to Running Target
+
+### Overview
+
+The STM32N6570-DK provides live debug via ST-Link SWD. Claude connects using the project's **Attach to Running** configuration — no reset, no download, symbols only. This preserves the running state for inspection.
+
+### Debug Infrastructure
+
+| Component | Path / Port |
+|-----------|-------------|
+| ST-Link GDB Server | `STM32CubeIDE/.../ST-LINK_gdbserver.exe` |
+| GDB | `arm-none-eabi-gdb.exe` (from STM32CubeIDE toolchain) |
+| CubeProgrammer | Required by GDB server (`-cp` path) |
+| GDB Port | 61234 (ST-Link default) |
+| Access Port | AP 1 (`-m 1`) — Cortex-M55 secure |
+| Transport | SWD (`-d` flag) |
+| OpenOCD Config | `STM32CubeIDE/Appli/STM32N6570-DK_Appli.cfg` (port 3333) |
+| Appli ELF | `Appli/TouchGFX/build/bin/target.elf` |
+| FSBL ELF | `FSBL/TouchGFX/build/bin/target.elf` |
+
+### debugFlag Boot Trap
+
+The Appli `main.c` includes a debug trap in USER CODE 1:
+
+```c
+static volatile int debugFlag = 1;  // Set to 1 to trap, 0 for normal boot
+while (debugFlag == 1)
+{
+    __NOP();
+}
+```
+
+**Usage:**
+- `debugFlag = 1` → board halts at `__NOP()`, waiting for debugger to set it to 0
+- `debugFlag = 0` → normal boot, no trap
+- Set to 1 when debugging boot issues, 0 for production/normal runs
+
+**Via GDB:**
+```
+set var debugFlag = 0
+continue
+```
+
+### Mandatory Rules
+
+| Rule | Rationale |
+|------|-----------|
+| **Always kill GDB server before flash** | ST-Link can't be shared between GDB and CubeProgrammer |
+| **Never attach during FSBL boot** | FSBL runs at 0x18xxxxxx, Appli symbols don't resolve. Wait 10-15s for Appli to start |
+| **Power cycle between debug sessions** | Clears hung debug state from SWD port |
+| **Never reset from GDB** | Use `no_reset` strategy — the Attach to Running config |
+| **Detach cleanly before disconnect** | `detach` then `quit` — don't just kill GDB |
+| **USART1 printf before GDB** | Always check terminal output first — faster and non-invasive |
+
+### Debug Session Protocol
+
+#### Step 1: Ensure GDB Server is Stopped
+```bash
+powershell.exe -NoProfile -Command "Get-Process -Name 'ST-LINK_gdbserver' -ErrorAction SilentlyContinue | Stop-Process -Force"
+```
+
+#### Step 2: Flash (if needed)
+```bash
+flash.bat load
+```
+
+#### Step 3: Power Cycle the Board
+Wait for user confirmation that the board has power cycled and is running.
+
+#### Step 4: Start GDB Server
+```bash
+ST-LINK_gdbserver.exe -p 61234 -t -d -cp <cubeprogrammer_path> -m 1 -k -e
+```
+Flags: `-t` attach, `-d` SWD, `-m 1` AP1, `-k` persistent, `-e` initWhile
+
+#### Step 5: Wait for Appli (10-15 seconds)
+FSBL needs time to copy Appli from external flash to SRAM and jump. Do NOT connect during this window.
+
+#### Step 6: Connect GDB
+```bash
+echo "target remote localhost:61234
+file <appli_elf>
+bt
+info reg pc
+x/i \$pc
+detach
+quit" | arm-none-eabi-gdb -q
+```
+
+#### Step 7: Interpret Results
+
+| PC Address Range | Meaning |
+|-----------------|---------|
+| `0x18xxxxxx` | Still in FSBL — wait longer |
+| `0x3401xxxx` | In Appli code — symbols will resolve |
+| `0x00000000` | Corrupt return address — stack overflow or bad pointer |
+| Branching to itself (`b.n` same addr) | Assertion trap or infinite loop — read the function name |
+
+### USART1 Debug Output
+
+Printf is redirected to USART1 (115200 baud) via BSP COM1. Terminal output is the **first diagnostic tool** — check it before attaching GDB.
+
+**Init order in USER CODE 2:**
+1. BSP COM1 (USART1) — printf available immediately
+2. BSP LEDs — visual alive indicator
+3. BSP Camera — logs init success/failure
+4. Other BSP peripherals
+
+**Printf convention for init sequence:**
+```c
+printf("=== STM32N6570-DK Appli Started ===\r\n");
+printf("LEDs: init OK\r\n");
+printf("Camera: initializing...\r\n");
+printf("Camera: BSP_CAMERA_Init OK\r\n");  // or FAILED
+```
+
+If terminal stops mid-sequence, the next init call after the last printf is where it hangs.
+
+### IRQ Handler Requirements
+
+When using BSP drivers (camera, etc.), the MX-generated IRQ handlers in `stm32n6xx_it.c` **MUST** call the HAL handler with the BSP handle. MX may generate empty stubs after regeneration — always verify:
+
+```c
+// In stm32n6xx_it.c — USER CODE sections
+void DCMIPP_IRQHandler(void)
+{
+    /* USER CODE BEGIN DCMIPP_IRQn 0 */
+    HAL_DCMIPP_IRQHandler(&hcamera_dcmipp);
+    /* USER CODE END DCMIPP_IRQn 0 */
+}
+
+void CSI_IRQHandler(void)
+{
+    /* USER CODE BEGIN CSI_IRQn 0 */
+    HAL_DCMIPP_CSI_IRQHandler(&hcamera_dcmipp);
+    /* USER CODE END CSI_IRQn 0 */
+}
+```
+
+**Empty IRQ handlers = unacknowledged interrupts = infinite re-trigger = system hang.**
+
+### Common Debug Scenarios
+
+| Symptom | Diagnosis | Fix |
+|---------|-----------|-----|
+| PC in FSBL after 15s | FSBL stuck or Appli image corrupt | Rebuild + reflash both |
+| PC in `__NOP` at main | debugFlag trap working | Set debugFlag = 0 via GDB |
+| PC in ISP infinite loop | ISP algo assertion, usually bad DCMIPP config | Check IRQ handlers, DCMIPP init |
+| No terminal output | USART1 not init'd, or crashed before printf | Check USER CODE 2 order |
+| Green LED off | Crashed before LED init in USER CODE 2 | Check MX peripheral inits |
+| Red LED on | BSP init returned error | Check terminal for which init failed |
+| Stack at 0x00000000 | Stack corruption | Check buffer sizes, DMA alignment |
+| GDB "Connection timed out" | GDB server not running or ST-Link disconnected | Kill, power cycle, restart |
+
+### Post-MX Regeneration Checklist
+
+MX regeneration can break the debug setup. After every MX regen, verify:
+
+- [ ] IRQ handlers in `stm32n6xx_it.c` still call BSP HAL handlers (not empty stubs)
+- [ ] `HAL_UART_MODULE_ENABLED` and `HAL_USART_MODULE_ENABLED` in `stm32n6xx_hal_conf.h`
+- [ ] UART/USART HAL source files exist in `Drivers/STM32N6xx_HAL_Driver/` (MX may wipe them)
+- [ ] USER CODE sections in `main.c` survived (BSP inits, printf redirect, debugFlag)
+- [ ] `stm32n6570_discovery_camera.h` include in `stm32n6xx_it.c` USER CODE EV section
+
+---
+
 ## TouchGFX Application Structure — Coding Convention
 
 ### Project Layout (Advanced / STM32CubeMX-Generated)
