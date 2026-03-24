@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Bash(powershell.exe:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(git:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(echo:*)",
+      "Bash(mkdir:*)",
+      "Bash(sleep:*)",
+      "Bash(which:*)",
+      "Bash(pip:*)",
+      "Bash(python3:*)",
+      "Bash(cd:*)",
+      "Bash(export:*)",
+      "Bash(arm-none-eabi:*)"
+    ]
+  }
+}
