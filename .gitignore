@@ -44,3 +44,5 @@ Secure_nsclib/*.o
 build/*
 Appli*/build/
 FSBL/build/
+nul
+gcc/nul
