@@ -1,0 +1,29 @@
+{
+  "description": "Knowledge module registry",
+  "modules": [
+    {
+      "id": "K_MIND",
+      "name": "Knowledge Mind",
+      "description": "Core memory system — mindmap, session management, near/far memory, scripts",
+      "status": "active",
+      "path": "Knowledge/K_MIND",
+      "has": ["mind", "sessions", "architecture", "constraints", "conventions", "work", "documentation", "scripts"]
+    },
+    {
+      "id": "K_TOOLS",
+      "name": "Knowledge Tools",
+      "description": "Operational utilities — testing, visualization, validation, projects, sessions, help system",
+      "status": "active",
+      "path": "Knowledge/K_TOOLS",
+      "has": ["conventions", "documentation", "methodology", "scripts", "skills", "test-plans", "test-reports", "work"]
+    },
+    {
+      "id": "K_STM32_MCP",
+      "name": "STM32 Live Debug",
+      "description": "MCP server for live STM32 debugging — GDB/MI integration, SVD register access, BAT script execution",
+      "status": "active",
+      "path": "Knowledge/K_STM32_MCP",
+      "has": ["architecture", "behaviors", "constraints", "conventions", "documentation", "methodology", "mind", "mcp", "scripts", "svd", "gdb", "work"]
+    }
+  ]
+}

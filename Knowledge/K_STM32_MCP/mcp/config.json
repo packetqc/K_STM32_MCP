@@ -1,0 +1,7 @@
+{
+  "target_mcu": "STM32F4xx",
+  "gdb_port": 3333,
+  "gdb_host": "localhost",
+  "svd_path": "Knowledge/K_STM32_MCP/svd",
+  "bat_scripts_dir": "scripts"
+}

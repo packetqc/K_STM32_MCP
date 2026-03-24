@@ -1,0 +1,40 @@
+{
+  "module": "K_TOOLS",
+  "conventions": [
+    {
+      "id": "multipart_help",
+      "name": "Multipart Help Architecture",
+      "description": "The help command outputs a concatenated command table from two sources: Part 1 (knowledge commands from K_TOOLS methodology/commands.md — always present) and Part 2 (project-specific commands from active project CLAUDE.md — varies per project). Commands are never duplicated — they are concatenated."
+    },
+    {
+      "id": "longest_match_first",
+      "name": "Longest-Match-First Command Routing",
+      "description": "When matching user input to commands, the registry is sorted by key length descending. This ensures 'harvest --healthcheck' matches before 'harvest', and 'normalize --fix' matches before 'normalize'."
+    },
+    {
+      "id": "command_module_mapping",
+      "name": "Command-to-Module Mapping",
+      "description": "Five command groups are owned by K_TOOLS: Content Management (pub, doc, webcard, weblinks, profile), Project Management (project, #N:, g:board), Live Session Analysis (I'm live, multi-live, recipe), Visuals (visual, deep, analyze), and Session Management (refresh, status, save, remember, elevate, resume, recover, recall, checkpoint, normalize). Session Management scripts live in K_TOOLS/scripts/session/ and integrate with K_MIND memory system. Harvest and Live Network are deferred — not yet assigned to a module."
+    },
+    {
+      "id": "session_management_k_mind_bridge",
+      "name": "Session Management — K_MIND Bridge",
+      "description": "Session management commands bridge K_TOOLS (command framework) and K_MIND (memory system). Commands like refresh, status, remember, and resume delegate to K_MIND scripts (session_init.py, memory_append.py, memory_stats.py). Commands like recall, recover, save, normalize, and checkpoint have standalone K_TOOLS scripts in scripts/session/ that read K_MIND memory. The wakeup command is NOT imported — K_MIND lifecycle events (session_init + /mind-context) handle session bootstrap."
+    },
+    {
+      "id": "help_wiring",
+      "name": "Help Display Wiring",
+      "description": "Help commands are wired to K_TOOLS scripts via two paths. Skill path: /know (Claude Code skill, renamed from /help to avoid built-in shadow). Script path: 'help' / 'aide' / '?' triggers: python3 Knowledge/K_TOOLS/scripts/help_command.py (outputs Part 1 command tables). '<cmd> ?' triggers: python3 Knowledge/K_TOOLS/scripts/help_contextual.py \"<cmd>\" (outputs contextual help for the specific command). Output goes to stdout — Claude reads and displays it directly."
+    },
+    {
+      "id": "command_section_creation",
+      "name": "Commands Section — Full Creation Pattern",
+      "description": "Creating a new command section requires ALL of these artifacts: (1) Script in K_TOOLS/scripts/ — the deterministic program. (2) Skill file in .claude/skills/<name>/SKILL.md — the Claude Code integration. (3) Entry in docs/data/commands.json — left panel registration with group, group_fr, description, description_fr, pub link, cmds array, and priority. (4) Section in docs/publications/guide-commands/full/index.md — command table with per-command <span id='cmd-slug'></span> anchors for tab uniqueness. (5) Publication in docs/publications/<slug>/index.md — standalone documentation. (6) Update to mind/mind_memory.md — work tracking node. (7) Update to K_TOOLS/conventions/conventions.json if the pattern introduces a new convention. Per-command anchors use cmdSlug(): lowercase, non-alphanumeric replaced with hyphens, trimmed."
+    },
+    {
+      "id": "bilingual_requirement",
+      "name": "EN + FR Required at Creation and Update",
+      "description": "Both English and French versions are REQUIRED when creating or updating any documentation asset. This applies to: (1) Publications — EN at docs/publications/<slug>/index.md, FR at docs/fr/publications/<slug>/index.md. (2) JSON data files — all user-facing strings must have _fr variants (title_fr, description_fr, group_fr). (3) Interface labels — LANG-aware with French fallback. (4) Viewer URLs — use &lang=fr parameter for French content, never prefix doc paths with fr/. Missing FR content causes the viewer to silently fall back to English, which appears broken to French users."
+    }
+  ]
+}

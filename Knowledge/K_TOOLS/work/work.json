@@ -1,0 +1,17 @@
+{
+  "module": "K_TOOLS",
+  "work": [
+    {
+      "name": "k-tools-module-creation",
+      "description": "Create K_TOOLS module — command framework, help system, and operational utilities. Import legacy command registry, help scripts, and command routing into Knowledge 2.0 multi-module architecture.",
+      "status": "en_cours",
+      "tasks": [
+        "Create module structure (conventions, documentation, methodology, scripts, work)",
+        "Import help_command.py and help_contextual.py from legacy",
+        "Adapt commands.md for new module paths",
+        "Wire help display to K_TOOLS scripts",
+        "Map each legacy command to target K_* module"
+      ]
+    }
+  ]
+}

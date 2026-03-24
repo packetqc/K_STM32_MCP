@@ -1,0 +1,21 @@
+{
+  "_comment": "Progressive check description registry. Keys are doc paths or phase::target patterns. Values are rich descriptions used in check snapshots instead of generic templates. Fallback chain: exact doc match → phase::target match → generic template.",
+  "by_doc": {
+    "interfaces/claude-interface/index.md": "Verify Claude interface loads with navigation, theme selector, and markdown rendering",
+    "interfaces/main-navigator/index.md": "Verify main navigator loads with left panel sections, center panel, and right panel",
+    "interfaces/task-workflow/index.md": "Verify task workflow interface loads with task stages and progress indicators",
+    "interfaces/tests-interface/index.md": "Verify tests interface loads with test history grid and LED status indicators"
+  },
+  "by_phase": {
+    "Interface": "Verify {target} interface renders correctly in {panel} panel with all interactive widgets functional",
+    "Profil": "Verify {target} profile page loads with personal information and navigation links",
+    "Publications": "Verify {target} publication renders with formatted content, metadata, and proof artifacts",
+    "Hubs": "Verify {target} hub page loads with section links and content navigation",
+    "Documentation": "Verify {target} documentation page renders with structured content and cross-references",
+    "Histoires": "Verify {target} story page loads with narrative content and embedded media",
+    "Méthodologies": "Verify {target} methodology document renders with procedure steps and reference tables",
+    "Configurations": "Verify {target} configuration page loads with settings and parameter tables",
+    "Commandes": "Verify {target} command reference renders with syntax, examples, and parameter descriptions",
+    "Essentiels": "Verify {target} essential page loads with core content and navigation structure"
+  }
+}

@@ -1,0 +1,3 @@
+mcp>=1.0.0
+pygdbmi>=0.11.0.0
+cmsis-svd>=0.4
