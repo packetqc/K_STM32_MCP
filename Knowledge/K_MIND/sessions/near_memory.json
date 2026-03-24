@@ -1,6 +1,13 @@
 {
-  "session_id": "1fc7fc1c-7035-46e0-9b68-0ea2fbd4aaae",
-  "pinned": [],
+  "session_id": "799a257c-d6fd-4501-9f5a-17b33e9aa3f8",
+  "pinned": [
+    {
+      "id": "pin-020",
+      "category": "reference",
+      "content": "STM32 Coding Methodology — full SDLC pipeline (methodology-coding.md). 1M: load fully. 200K: reference pointer. Path: Knowledge/K_STM32_MCP/methodology/methodology-coding.md",
+      "mind_ref": "conventions::methodology::stm32-coding"
+    }
+  ],
   "wip_context": {},
   "summaries": []
 }
