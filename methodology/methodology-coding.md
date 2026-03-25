@@ -504,6 +504,100 @@ void MyView::setupScreen()
 
 ---
 
+## Live Debugging — GDB Attach to Running Appli
+
+### Connection Setup
+
+```bash
+# GDB Server (persistent mode, halt on connect)
+ST-LINK_gdbserver.exe -p 61234 -l 1 -d -e -i <STLINK_SERIAL> \
+  -cp <CUBEPROGRAMMER_BIN> -ei <EXTERNAL_LOADER> -m 1 -g
+
+# GDB Client (with GCC-built ELF for matching symbols)
+arm-none-eabi-gdb -batch \
+  -ex "file Appli/TouchGFX/build/bin/target.elf" \
+  -ex "target remote localhost:61234" \
+  -ex "<commands>" \
+  -ex "detach"
+```
+
+### Debug Flow Protocol
+
+1. **Kill GDB server** before any flash or boot mode switch
+2. **Flash** with device in boot 1
+3. **Switch to boot 0**, power cycle
+4. **Start GDB server** via PowerShell (not bash — avoids drive mapping error 138)
+5. **Connect GDB**, release `debugFlag = 0`, detach
+6. **Wait 5-10 seconds** for app to initialize
+7. **Reconnect** to inspect state
+8. **Always detach** cleanly — never leave GDB connected idle
+
+### Normal Behavior Patterns (DO NOT misinterpret as frozen)
+
+| GDB Backtrace | Meaning | Status |
+|----------------|---------|--------|
+| `__tx_ts_wait` → `waitForVSync` → `HAL::taskEntry` | TouchGFX idle, waiting for next VSYNC | **NORMAL** — render loop running |
+| `__tx_ts_wait` → `tx_queue_receive` → `OSWrappers::waitForVSync` | Same — VSYNC queue wait | **NORMAL** |
+| `__tx_ts_wait` → `tx_thread_system_suspend` → `TouchGFXThread` | ThreadX scheduled out, will resume on VSYNC | **NORMAL** |
+| `Model::tick` breakpoint hits repeatedly | Confirms TouchGFX is ticking at frame rate | **NORMAL** — app alive |
+
+### Frozen / Crash Patterns (ACTUAL problems)
+
+| GDB Backtrace | Meaning | Action |
+|----------------|---------|--------|
+| `MemManage_Handler` → `while(1)` | MPU violation — bad memory access | Check MPU regions, buffer placement, section attributes |
+| `HardFault_Handler` → `while(1)` | Crash — NULL deref, stack overflow, alignment | Read CFSR/MMFAR/BFAR registers |
+| `nema_wait_irq` → `tx_semaphore_get` → `HALGPU2D::endFrame` | GPU2D hung — can't access bitmap memory | Check RIF master config for GPU2D, verify buffer is in accessible region |
+| `BSP_CAMERA_Init` never returns | I2C sensor communication stuck | Check I2C bus, sensor power, clock |
+| `tx_semaphore_get` with `wait_option=0xFFFFFFFF` stuck for > 10s | Interrupt not firing | Check NVIC priority, ISR handler linkage |
+
+### Key Diagnostic Commands
+
+```bash
+# Check where execution is
+bt 5
+
+# Verify TouchGFX is ticking (set breakpoint, hit twice)
+break Model::tick
+continue    # should hit quickly
+continue    # should hit again
+
+# Read fault registers after MemManage/HardFault
+x/w 0xE000ED28    # CFSR — fault status
+x/w 0xE000ED34    # MMFAR — faulting address
+x/w 0xE000ED38    # BFAR — bus fault address
+
+# Check MPU region N
+set {int}0xE000ED98 = N    # select region
+x/w 0xE000ED9C              # RBAR — base address
+x/w 0xE000EDA0              # RLAR — limit + attributes
+
+# Check DCMIPP pipe state
+print hcamera_dcmipp.PipeState[1]
+print hcamera_dcmipp.ErrorCode
+
+# Read buffer content (RGB565 pixels)
+x/8h &cameraBuffer
+```
+
+### Interrupt Priority Rules
+
+| Interrupt | Priority | Notes |
+|-----------|----------|-------|
+| System tick (TIM2) | 5 | ThreadX timebase — never change |
+| LTDC global | 9 | TouchGFX VSYNC — must fire reliably |
+| LTDC error | 5 | Display error handling |
+| GPU2D global | 9 | NemaGFX rendering — must not be starved |
+| GPU2D error | 5 | GPU error handling |
+| DMA2D global | 9 | Blit engine |
+| DCMIPP global | **Must be > 9** | Camera pipe — must NOT preempt LTDC/GPU2D |
+| CSI global | **Must be > 9** | Camera serial — must NOT preempt LTDC/GPU2D |
+| HPDMA channels | 6-7 | DMA transfers |
+
+**Critical rule:** Camera interrupts (DCMIPP, CSI) must have LOWER priority (higher number) than display/GPU interrupts (LTDC, GPU2D). Camera overrun errors generate continuous interrupts that starve the render loop if they have higher priority.
+
+---
+
 ## Workflow Summary
 
 ```
