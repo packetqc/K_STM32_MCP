@@ -350,6 +350,72 @@ void <module>_deinit(void);
 
 ---
 
+## STM32CubeMX-First Convention — MX Manages the Project
+
+### The Iron Rule
+
+**STM32CubeMX (MX) is the single source of truth for peripheral configuration and project file linkage.** Every HAL driver, middleware, and BSP dependency MUST be configured through MX. Claude NEVER hand-imports drivers, edits `.cproject`, modifies linker scripts, or manually enables HAL modules.
+
+### Why This Matters (Lessons from Production)
+
+| What Claude Did Wrong | What Broke | Hard Rule |
+|----------------------|------------|-----------|
+| Hand-copied HAL UART/USART `.c` files | Duplicates on MX regen, IDE confusion | **MX links HAL files — never copy manually** |
+| Edited `gcc/makefile_appli` to add BSP | IDE and GCC Makefile diverged | **IDE project is source of truth for file linkage** |
+| Edited `stm32n6xx_hal_conf.h` to enable modules | MX regen overwrites non-USER-CODE sections | **Enable peripherals in MX, not in header** |
+| Edited `STM32N657XX_LRUN.ld` linker script | FSBL build broke, IDE registry corrupted | **Never touch linker scripts** |
+| Added `.psram_bss` section to linker script | Memory layout mismatch | **Use existing memory sections (FB_RAM, etc.)** |
+| Skipped baseline build verification | Debugging mixed code + config issues | **Verify FSBL + Appli builds before ANY code changes** |
+
+### MX Peripheral Configuration Protocol
+
+When a new peripheral is needed:
+
+1. **Enable in MX** → generates HAL init, MSP callbacks, IRQ handlers, links HAL driver files
+2. **Optionally disable MX init generation** → if BSP handles the init (e.g., camera, COM port)
+3. **BSP handles actual init** → in USER CODE sections, using MX-provided HAL handles
+4. **Regenerate code** → MX updates `.cproject`, `hal_conf.h`, and all generated files
+5. **Verify build** → both IDE and GCC Makefile must compile clean
+
+**Disabling MX init generation** means MX still links the HAL files and declares the handle, but does NOT generate the `MX_xxx_Init()` function. The BSP calls `HAL_xxx_Init()` with its own configuration. This gives us file linkage without conflicting inits.
+
+### BSP Integration Pattern
+
+BSP (Board Support Package) files are NOT managed by MX. They must be imported through the IDE:
+
+1. **Human imports BSP** from the firmware package via IDE UI (Project → Properties → add source/include paths)
+2. **Exclude unused BSP files** from build (only keep discovery, bus, camera, etc.)
+3. **Claude codes BSP calls** in USER CODE sections of `main.c`
+4. **BSP sources live in `Drivers/BSP/`** — linked by IDE, not copied manually
+
+### Files Claude MUST NEVER Modify
+
+| File | Owner | Why |
+|------|-------|-----|
+| `*.cproject` | CubeIDE | IDE project config — hand-editing corrupts the MX registry |
+| `*.project` | CubeIDE | IDE workspace config |
+| `STM32N657XX_LRUN.ld` | MX/IDE | Linker script — memory layout is precise |
+| `STM32N657XX_XIP.ld` | MX/IDE | Linker script — XIP variant |
+| `makefile_fsbl` | MX/IDE | FSBL build rules |
+| `makefile_appli` | MX/IDE | Appli build rules |
+| `stm32n6xx_hal_conf.h` (outside USER CODE) | MX | HAL module enables — MX overwrites on regen |
+| `*.launch` | CubeIDE | Debug launch configurations |
+| `*.touchgfx` | TouchGFX Designer | Widget definitions |
+
+### Pre-Coding Baseline Check (Mandatory)
+
+**Before writing ANY code in a new session:**
+
+1. Verify IDE builds FSBL — clean, no errors
+2. Verify IDE builds Appli — clean, no errors
+3. Verify `build.bat all` works — GCC path also clean
+4. Flash and boot — board alive, no regressions
+5. THEN start coding
+
+Skipping this baseline means debugging code issues mixed with build issues. Always establish a known-good state first.
+
+---
+
 ## Forbidden Actions
 
 | Action | Why | Do Instead |
@@ -357,6 +423,11 @@ void <module>_deinit(void);
 | Edit files in `generated/` | Overwritten by TouchGFX Designer | Edit in `gui/src/` user code |
 | Edit files in `Drivers/` | Vendor HAL — not project code | Use HAL API, report driver bugs |
 | Edit files in `Middlewares/` | Framework code — not yours | Use framework API |
+| Edit `.cproject` or `.project` | IDE project config — corruption risk | Use IDE UI or MX |
+| Edit linker scripts | Memory layout breaks FSBL/Appli | Use existing memory sections |
+| Edit `makefile_appli` or `makefile_fsbl` | IDE/GCC divergence | Add files through IDE project |
+| Hand-copy HAL driver files | Duplicates on MX regen | Enable peripheral in MX |
+| Hand-enable HAL modules in `hal_conf.h` | MX overwrites on regen | Enable peripheral in MX |
 | Use `malloc`/`new` in firmware | Heap fragmentation kills embedded | Static allocation |
 | Raw register writes in app code | Bypasses HAL safety | Use `HAL_xxx()` functions |
 | Add `#pragma` to suppress warnings | Hides real bugs | Fix the warning |
@@ -367,6 +438,8 @@ void <module>_deinit(void);
 | Code without WIP context | Compaction loses design decisions | Set WIP before implementing |
 | Roll your own crypto on H5 | Hardware accelerators exist | Use `HAL_CRYP_*`, `HAL_HASH_*` |
 | Ignore cache on N6 | DMA corruption, data races | `SCB_CleanDCache` / `SCB_InvalidateDCache` |
+| Skip pre-coding baseline check | Debug code + config issues simultaneously | Verify builds before any changes |
+| Push to subtree upstreams automatically | K_ module repos are on-demand only | Only push to `origin` unless explicitly asked |
 
 ---
 
@@ -530,10 +603,17 @@ flash.bat load
 Wait for user confirmation that the board has power cycled and is running.
 
 #### Step 4: Start GDB Server
+
+**Use the exact project-provided command** (from STM32N6570-DK_Attach_To_Running.launch):
 ```bash
-ST-LINK_gdbserver.exe -p 61234 -t -d -cp <cubeprogrammer_path> -m 1 -k -e
+"C:\ST\STM32CubeIDE_1.19.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.win32_2.2.400.202601091506\tools\bin\ST-LINK_gdbserver.exe" \
+  -p 61234 -l 1 -d \
+  -i 004C00493234510E37333934 \
+  -cp "C:\ST\STM32CubeIDE_1.19.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.400.202601091506\tools\bin" \
+  -ei MX66UW1G45G_STM32N6570-DK.stldr \
+  -m 1 -g
 ```
-Flags: `-t` attach, `-d` SWD, `-m 1` AP1, `-k` persistent, `-e` initWhile
+Flags: `-p 61234` port, `-l 1` log level, `-d` SWD, `-i` ST-Link serial, `-cp` CubeProgrammer path, `-ei` external NOR loader, `-m 1` AP1 (Cortex-M55 secure), `-g` halt on connect
 
 #### Step 5: Wait for Appli (10-15 seconds)
 FSBL needs time to copy Appli from external flash to SRAM and jump. Do NOT connect during this window.
